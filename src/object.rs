@@ -7,27 +7,27 @@ use std::f32::consts::PI;
 
 type T = f32;
 
-pub struct HitResult {
+pub struct HitResult<'a> {
   pub p: Point,
   pub normal: Vec3,
   pub t: T,
   pub front_face: bool,
-  pub material: Material,
+  pub material: &'a Material,
   // u, v are surface coordinats for this hit.
   pub u: T,
   pub v: T
 }
 
-impl HitResult {
-  pub fn new(
+impl HitResult<'_> {
+  pub fn new<'a>(
     p: Point,
     r: &Ray,
     t: T,
     outward_normal: &Vec3,
-    material: Material,
+    material: &'a Material,
     u: T,
     v: T
-  ) -> HitResult {
+  ) -> HitResult<'a> {
     let front_face = r.direction.dot(outward_normal) < 0.0;
     let normal = if front_face {
         *outward_normal
@@ -109,7 +109,7 @@ impl Object for Sphere {
 
       let u = phi / (2.0 * PI);
       let v = theta / PI;
-      Some(HitResult::new(point, ray, t, &normal, self.material.clone(), u, v))
+      Some(HitResult::new(point, ray, t, &normal, &self.material, u, v))
     }
   }
   fn bounding_box(&self, time0: T, time1: T) -> Option<BoundingBox> {
@@ -186,7 +186,7 @@ impl Object for MovingSphere {
 
       let u = phi / (2.0 * PI);
       let v = theta / PI;
-      Some(HitResult::new(point, ray, t, &normal, self.material.clone(), u, v))
+      Some(HitResult::new(point, ray, t, &normal, &self.material, u, v))
     }
   }
   

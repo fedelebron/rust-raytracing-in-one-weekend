@@ -15,7 +15,7 @@ pub struct Vec3 {
 
 impl Vec3 {
   pub fn new(x: T, y: T, z: T) -> Vec3 {
-    Vec3 { x: x, y: y, z: z }
+    Vec3 { x, y, z }
   }
 
   pub fn random_unit() -> Vec3 {
@@ -39,8 +39,7 @@ impl Vec3 {
   }
 
   pub fn norm_squared(&self) -> T {
-    let Vec3 { x, y, z } = self;
-    x * x + y * y + z * z
+    self.x * self.x + self.y * self.y + self.z * self.z
   }
 
   pub fn norm(&self) -> T {
@@ -60,11 +59,7 @@ impl Vec3 {
   }
 
   pub fn dot(&self, rhs: &Vec3) -> T {
-    let mut res: T = 0.0;
-    for i in 0..3 {
-      res += self[i] * rhs[i];
-    }
-    res
+    self.x * rhs.x + self.y * rhs.y + self.z * rhs.z
   }
 }
 
