@@ -1,0 +1,15 @@
+[package]
+name = "raytracer"
+version = "0.1.0"
+authors = ["flebron"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+image = "0.23.12"
+rand = "0.8.0"
+threadpool = "1.8.1"
+atomic-counter = "1.0.1"
+indicatif = "0.15.0"
+rusttype = "0.9.2"
