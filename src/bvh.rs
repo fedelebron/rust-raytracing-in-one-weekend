@@ -10,8 +10,8 @@ use std::sync::Arc;
 type T = f32;
 
 pub struct BVHNode {
-  left: Option<Box<Object>>,
-  right: Option<Box<Object>>,
+  left: Option<Arc<dyn Object + Send + Sync>>,
+  right: Option<Arc<dyn Object + Send + Sync>>,
   bounding_box: BoundingBox,
 }
 
@@ -28,42 +28,42 @@ impl BVHNode {
   }
 
   pub fn new_from_objects(
-    objects: &mut [Option<Box<Object>>],
+    objects: &mut [Arc<dyn Object + Send + Sync>],
     time0: T,
     time1: T,
   ) -> BVHNode {
     let mut rng = rand::thread_rng();
     let axis: usize = rng.gen_range(0..3);
-    let comparator = |x: &Option<Box<Object>>,
-                      y: &Option<Box<Object>>| {
-      compare_by_dim(&**(x.as_ref().unwrap()), &**(y.as_ref().unwrap()), time0, time1, axis)
+    let comparator = |x: &Arc<dyn Object + Send + Sync>,
+                      y: &Arc<dyn Object + Send + Sync>| {
+      compare_by_dim(&(**x), &(**y), time0, time1, axis)
     };
     let mut node = BVHNode::new();
     let n = objects.len();
     if n == 1 {
-      node.left = objects[0].take();
-      node.right = None;
+      node.left = Some(objects[0].clone());
+      node.right = Some(objects[0].clone());
     } else if n == 2 {
       if comparator(&objects[0], &objects[1]) == Ordering::Less {
-        node.left = objects[0].take();
-        node.right = objects[1].take();
+        node.left = Some(objects[0].clone());
+        node.right = Some(objects[1].clone());
       } else {
-        node.left = objects[1].take();
-        node.right = objects[0].take();
+        node.left = Some(objects[1].clone());
+        node.right = Some(objects[0].clone());
       }
     } else {
       objects.sort_by(comparator);
       let mid = n / 2;
-      node.left = Some(Box::new(Object::BVHNodeType(BVHNode::new_from_objects(
+      node.left = Some(Arc::new(BVHNode::new_from_objects(
         &mut objects[0..mid],
         time0,
         time1,
-      ))));
-      node.right = Some(Box::new(Object::BVHNodeType(BVHNode::new_from_objects(
+      )));
+      node.right = Some(Arc::new(BVHNode::new_from_objects(
         &mut objects[mid..n],
         time0,
         time1,
-      ))));
+      )));
     }
     let mut left_bb = node
       .left
@@ -71,46 +71,42 @@ impl BVHNode {
       .unwrap()
       .bounding_box(time0, time1)
       .unwrap();
-    match node.right {
-      None => { node.bounding_box = left_bb; }
-      Some (ref right_node) => {
-        let right_bb = right_node.bounding_box(time0, time1).unwrap();
-        node.bounding_box = BoundingBox::surrounding_box(&left_bb, &right_bb);
-      }
-    }
+    let right_bb = node.right.as_ref().unwrap().bounding_box(time0, time1).unwrap();
     
+    node.bounding_box = BoundingBox::surrounding_box(&left_bb, &right_bb);
     node
   }
 }
 
-impl BVHNode {
-  pub fn hit(&self, t_min: T, t_max: T, ray: &Ray) -> Option<HitResult> {
+impl Object for BVHNode {
+  fn hit(&self, t_min: T, t_max: T, ray: &Ray) -> Option<HitResult> {
     if !self.bounding_box.hit(t_min, t_max, ray) {
       return None;
     }
     
     let left_node = self.left.as_ref().unwrap();
+    let right_node = self.right.as_ref().unwrap();
 
     let left_hit = left_node.hit(t_min, t_max, ray);
     match left_hit {
-      None => {
-          self.right.as_ref().and_then(|node| node.hit(t_min, t_max, ray)) }
+      None => right_node.hit(t_min, t_max, ray),
       Some(ref hrl) => {
-        match self.right {
-          None => { left_hit },
-          Some(ref right_node) => { right_node.hit(t_min, hrl.t, ray).or(left_hit) }
+        let right_hit = right_node.hit(t_min, hrl.t, ray);
+        match right_hit {
+          None => left_hit,
+          Some(_) => right_hit
         }
       }
     }
   }
-  pub fn bounding_box(&self, _time0: T, _time1: T) -> Option<BoundingBox> {
+  fn bounding_box(&self, _time0: T, _time1: T) -> Option<BoundingBox> {
     Some(self.bounding_box)
   }
 }
 
 fn compare_by_dim(
-  a: &Object,
-  b: &Object,
+  a: &dyn Object,
+  b: &dyn Object,
   time0: T,
   time1: T,
   axis: usize,
