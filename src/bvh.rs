@@ -32,7 +32,7 @@ impl BVHNode {
     time1: T,
   ) -> BVHNode {
     let mut rng = rand::thread_rng();
-    let axis: usize = rng.gen_range(0..3);
+    let axis: u32 = rng.gen_range(0..3);
     let comparator =
       |x: &Option<Box<dyn Object + Send + Sync>>,
        y: &Option<Box<dyn Object + Send + Sync>>| {
@@ -131,7 +131,7 @@ fn compare_by_dim(
   b: &dyn Object,
   time0: T,
   time1: T,
-  axis: usize,
+  axis: u32,
 ) -> Ordering {
   // Note that comparing at time 0 here doesn't change much, it just means objects will fall into
   // different bounding boxes that may not be as efficient as possible at a given time, but the

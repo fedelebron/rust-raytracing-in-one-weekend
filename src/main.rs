@@ -3,11 +3,11 @@ mod canvas;
 mod material2;
 mod object;
 mod ray;
+mod vec3_scalar;
 mod vec3;
 mod aabb;
 mod bvh;
 mod texture;
-mod simd;
 
 use crate::camera::*;
 use crate::canvas::*;
@@ -28,22 +28,22 @@ use threadpool::ThreadPool;
 type T = f32;
 
 fn ray_color(r: &Ray, obj: &dyn Object, depth: i32) -> Color {
-  const BLACK: Color = Color::new(0.0, 0.0, 0.0);
-  const WHITE: Color = Color::new(1.0, 1.0, 1.0);
-  const SKY: Color = Color::new(0.5, 0.7, 1.0);
+  let black = Color::new(0.0, 0.0, 0.0);
+  let white = Color::new(1.0, 1.0, 1.0);
+  let sky = Color::new(0.5, 0.7, 1.0);
   if depth <= 0 {
-    return BLACK;
+    return black;
   }
   match obj.hit(0.001, T::INFINITY, r) {
     None => {
       let unit = r.direction / r.direction.norm();
-      let t = 0.5 * (unit.y + 1.0);
-      (1.0 - t) * WHITE + t * SKY
+      let t = 0.5 * (unit.y() + 1.0);
+      (1.0 - t) * white + t * sky
     }
     Some(hr) => {
       let payload = hr.obj.hit_payload(hr.t, r);
       match payload.material.scatter(r, &payload) {
-        None => BLACK,
+        None => black,
         Some(sr) => sr.attenuation * ray_color(&sr.scattered_ray, obj, depth - 1),
       }
     },
@@ -146,8 +146,8 @@ fn make_world() -> World {
 }
 
 fn render_spheres() {
-  let image_width = (2 * 400) as u32;
-  let image_height = (2 * 225) as u32;
+  let image_width = (1 * 400) as u32;
+  let image_height = (1 * 225) as u32;
 
   let samples_per_pixel = 100 as u32;
 
@@ -155,6 +155,7 @@ fn render_spheres() {
   //let lookfrom = Point::new(13.0, 2.0, 3.0);
   let lookfrom = Point::new(3.0, 2.0, 13.0);
   let lookat = Point::new(0.0, 0.0, 0.0);
+  println!("Lookat: {:?}, lookfrom: {:?}, coord: {:?}", lookat, lookfrom, (lookfrom.0.x(), lookfrom.0.y(), lookfrom.0.z()));
   let vup = Vec3::new(0.0, 1.0, 0.0);
   let aspect_ratio = image_width as T / image_height as T;
   let aperture = 0.05; // 2.0;

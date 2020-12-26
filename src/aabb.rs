@@ -3,9 +3,12 @@ use crate::vec3::*;
 use std::cmp::Ordering;
 use std::mem;
 
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::*;
+
 type T = f32;
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone)]
 pub struct BoundingBox {
   minimum: Point,
   maximum: Point,
@@ -16,10 +19,8 @@ impl BoundingBox {
     BoundingBox { minimum, maximum }
   }
   pub fn hit(&self, mut t_min: T, mut t_max: T, ray: &Ray) -> bool {
-    if false {
-        return self.hit_vectorized(t_min, t_max, ray);
-    }
-    for a in 0..3 {
+    return self.hit_vectorized(t_min, t_max, ray);
+    /*for a in 0..3 {
       let inv_d = 1.0 / ray.direction[a];
       let mut t0 = (self.minimum[a] - ray.origin[a]) * inv_d;
       let mut t1 = (self.maximum[a] - ray.origin[a]) * inv_d;
@@ -32,7 +33,7 @@ impl BoundingBox {
         return false;
       }
     }
-    return true;
+    return true;*/
   }
 
   fn hit_vectorized(&self, mut t_min: T, mut t_max: T, ray: &Ray) -> bool {
@@ -49,19 +50,50 @@ impl BoundingBox {
   }
 
   pub fn surrounding_box(bb1: &BoundingBox, bb2: &BoundingBox) -> BoundingBox {
-    let mut small = Point(Vec3::new(0.0, 0.0, 0.0));
-    let mut big = Point(Vec3::new(0.0, 0.0, 0.0));
-    for a in 0..3 {
-      small[a] = bb1.minimum[a].min(bb2.minimum[a]);
-      big[a] = bb1.maximum[a].max(bb2.maximum[a]);
-    }
+    let small = bb1.minimum.0.min(bb2.minimum.0);
+    let big = bb1.maximum.0.max(bb2.maximum.0);
     BoundingBox {
-      minimum: small,
-      maximum: big,
+      minimum: Point(small),
+      maximum: Point(big),
     }
   }
 
-  pub fn less_than_by_dim(&self, rhs: &BoundingBox, axis: usize) -> Ordering {
-    self.minimum[axis].partial_cmp(&rhs.minimum[axis]).unwrap()
+  /*pub fn less_than_by_dim(&self, rhs: &BoundingBox, axis: u32) -> Ordering {
+    let sub = self.minimum.0 - rhs.minimum.0;
+    let sign = match axis {
+        0 => unsafe {
+          _mm_cvtss_f32(_mm_shuffle_ps(sub.0, sub.0, _mm_shuffle(0, 0, 0, 3))) },
+        1 => unsafe {
+          _mm_cvtss_f32(_mm_shuffle_ps(sub.0, sub.0, _mm_shuffle(0, 0, 0, 2))) },
+        _ => unsafe {
+          _mm_cvtss_f32(_mm_shuffle_ps(sub.0, sub.0, _mm_shuffle(0, 0, 0, 1))) }
+    };
+    if sign < 0.0 {
+      Ordering::Less
+    } else if sign == 0.0 {
+      Ordering::Equal
+    } else {
+      Ordering::Greater
+    }
+  }*/
+  pub fn less_than_by_dim(&self, rhs: &BoundingBox, axis: u32) -> Ordering {
+    let sub = self.minimum.0 - rhs.minimum.0;
+    let sign = match axis {
+      0 => { sub.x() },
+      1 => { sub.y() },
+      _ => { sub.z() }
+    };
+    if sign < 0.0 {
+      Ordering::Less
+    } else if sign == 0.0 {
+      Ordering::Equal
+    } else {
+      Ordering::Greater
+    }
   }
+  
+}
+
+const fn _mm_shuffle(z: u32, y: u32, x: u32, w: u32) -> i32 {
+    ((z << 6) | (y << 4) | (x << 2) | w) as i32
 }

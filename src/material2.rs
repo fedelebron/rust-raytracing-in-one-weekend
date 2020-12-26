@@ -59,7 +59,7 @@ fn scatter_lambertian(
     scatter_direction = hit.normal;
   }
   Some(ScatterResult {
-    attenuation: albedo.value(hit.u, hit.v, &hit.p),
+    attenuation: albedo.value(hit.u, hit.v, hit.p),
     scattered_ray: Ray {
       origin: hit.p,
       direction: scatter_direction,
@@ -68,15 +68,15 @@ fn scatter_lambertian(
   })
 }
 
-fn reflect(v: &Vec3, n: &Vec3) -> Vec3 {
-  *v - 2.0 * (*v).dot(n) * (*n)
+fn reflect(v: Vec3, n: Vec3) -> Vec3 {
+  v - 2.0 * v.dot(n) * n
 }
 
-fn refract(v: &Vec3, n: &Vec3, refraction_ratio: T) -> Vec3 {
-  let cos_theta = (-(*v).dot(n)).min(1.0);
-  let r_out_perp = refraction_ratio * ((*v) + cos_theta * (*n));
+fn refract(v: Vec3, n: Vec3, refraction_ratio: T) -> Vec3 {
+  let cos_theta = (-v).dot(n).min(1.0);
+  let r_out_perp = refraction_ratio * (v + cos_theta * n);
   let r_out_parallel =
-    (1.0 - r_out_perp.norm_squared()).abs().sqrt() * (*n) * (-1.0);
+    (1.0 - r_out_perp.norm_squared()).abs().sqrt() * n * (-1.0);
   r_out_perp + r_out_parallel
 }
 
@@ -87,15 +87,15 @@ fn scatter_metal(
   hit: &HitResultPayload,
 ) -> Option<ScatterResult> {
   let r = incident_ray.direction;
-  let reflected = reflect(&(r / r.norm()), &hit.normal);
+  let reflected = reflect(r.normalize(), hit.normal);
   let scattered = Ray {
     origin: hit.p,
     direction: reflected + fuzz * Vec3::random_unit(),
     time: incident_ray.time,
   };
-  if reflected.dot(&hit.normal) > 0.0 {
+  if reflected.dot(hit.normal) > 0.0 {
     return Some(ScatterResult {
-      attenuation: albedo.value(hit.u, hit.v, &hit.p),
+      attenuation: albedo.value(hit.u, hit.v, hit.p),
       scattered_ray: scattered,
     });
   }
@@ -117,7 +117,7 @@ fn scatter_dielectric(
   let r = incident_ray.direction;
   let unit_direction = r / r.norm();
 
-  let cos_theta = (-unit_direction.dot(&hit.normal)).min(1.0);
+  let cos_theta = (-unit_direction.dot(hit.normal)).min(1.0);
   let sin_theta = (1.0 - cos_theta * cos_theta).sqrt();
   let cannot_refract = refraction_ratio * sin_theta > 1.0;
 
@@ -128,9 +128,9 @@ fn scatter_dielectric(
   };
   let direction =
     if cannot_refract || reflectance(cos_theta, refraction_ratio) > rng.gen() {
-      reflect(&unit_direction, &hit.normal)
+      reflect(unit_direction, hit.normal)
     } else {
-      refract(&unit_direction, &hit.normal, refraction_ratio)
+      refract(unit_direction, hit.normal, refraction_ratio)
     };
 
   let scattered = Ray {

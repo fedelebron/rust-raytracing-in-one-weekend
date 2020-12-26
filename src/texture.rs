@@ -14,7 +14,7 @@ pub enum Texture {
 
 impl Texture {
   // u, v are surface coordinates.
-  pub fn value(&self, u: T, v: T, p: &Point) -> Color {
+  pub fn value(&self, u: T, v: T, p: Point) -> Color {
     match self {
       Texture::Color(x) => *x,
       Texture::Checkers(ref white, ref black) => get_checkers_color(&**white, &**black, u, v, p),
@@ -27,8 +27,9 @@ impl Texture {
   }
 }
 
-fn get_checkers_color(white: &Texture, black: &Texture, u: T, v: T, p: &Point) -> Color {
-  let sines = (10.0 * p.0.x).sin() * (10.0 * p.0.y).sin() * (10.0 * p.0.z).sin();
+fn get_checkers_color(white: &Texture, black: &Texture, u: T, v: T, p: Point) -> Color {
+  let w = 10.0 * p.0;
+  let sines = w.x().sin() * w.y().sin() * w.z().sin();
   if sines < 0.0 {
     white.value(u, v, p)
   } else {
@@ -46,7 +47,7 @@ fn clamp<T: PartialOrd>(x: T, lo: T, hi: T) -> T {
   return x;
 }
 
-fn get_image_color(image: &RgbImage, mut u: T, mut v: T, _p: &Point) -> Color {
+fn get_image_color(image: &RgbImage, mut u: T, mut v: T, _p: Point) -> Color {
   u = clamp(u, 0.0, 1.0);
   v = 1.0 - clamp(v, 0.0, 1.0);
 

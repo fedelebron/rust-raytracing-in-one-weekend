@@ -23,10 +23,10 @@ pub struct Camera {
 }
 
 // S^1 here is embedded into R^3 by the mapping (x, y) -> (x, y, 0).
-fn random_vector_in_s1() -> Vec3 {
+fn random_vector_in_s1() -> (T, T) {
   let mut rng = rand::thread_rng();
   let theta = rng.gen::<T>() * 2.0 * PI;
-  Vec3::new(theta.cos(), theta.sin(), 0.0)
+  (theta.cos(), theta.sin())
 }
 
 impl Camera {
@@ -48,8 +48,8 @@ impl Camera {
     let viewport_width = aspect_ratio * viewport_height;
 
     let w = (lookfrom - lookat).normalize();
-    let u = vup.cross(&w);
-    let v = w.cross(&u);
+    let u = vup.cross(w);
+    let v = w.cross(u);
 
     let origin = lookfrom;
     let horizontal = focus_distance * viewport_width * u;
@@ -72,8 +72,8 @@ impl Camera {
 
   pub fn get_ray(&self, s: T, t: T) -> Ray {
     let mut rng = rand::thread_rng();
-    let offset_origin = self.lens_radius * random_vector_in_s1();
-    let offset = self.u * offset_origin.x + self.v * offset_origin.y;
+    let (vx, vy) = random_vector_in_s1();
+    let offset = self.lens_radius * (self.u * vx + self.v * vy);
     Ray {
       origin: self.origin + offset,
       direction: self.lower_left_corner + s * self.horizontal + t * self.vertical

@@ -35,16 +35,16 @@ impl HitResultPayload<'_> {
   pub fn new<'a>(
     p: Point,
     r: &Ray,
-    outward_normal: &Vec3,
+    outward_normal: Vec3,
     material: &'a Material,
     u: T,
     v: T,
   ) -> HitResultPayload<'a> {
     let front_face = r.direction.dot(outward_normal) < 0.0;
     let normal = if front_face {
-        *outward_normal
+        outward_normal
       } else {
-        -*outward_normal
+        -outward_normal
       };
     HitResultPayload {
       p,
@@ -86,7 +86,7 @@ impl Object for Sphere {
   fn hit(&self, t_min: T, t_max: T, ray: &Ray) -> Option<HitResult> {
     let oc: Vec3 = ray.origin - self.center;
     let a = ray.direction.norm_squared();
-    let half_b = oc.dot(&ray.direction);
+    let half_b = oc.dot(ray.direction);
     let c = oc.norm_squared() - self.radius * self.radius;
     let discriminant = half_b * half_b - a * c;
     if discriminant < 0.0 {
@@ -113,12 +113,12 @@ impl Object for Sphere {
     // hit the sphere, had the sphere been centered at the origin. We can then use its
     // coordinates to figure out the spherical coordinates for the hit, for such an
     // origin-centered sphere.
-    let theta = (-normal.y).acos();
-    let phi = (-normal.z).atan2(normal.x) + PI;
+    let theta = (-normal.y()).acos();
+    let phi = (-normal.z()).atan2(normal.x()) + PI;
 
     let u = phi / (2.0 * PI);
     let v = theta / PI;
-    HitResultPayload::new(point, ray, &normal, &self.material, u, v)
+    HitResultPayload::new(point, ray, normal, &self.material, u, v)
   }
   fn bounding_box(&self, _time0: T, _time1: T) -> Option<BoundingBox> {
     let v = Vec3::new(self.radius, self.radius, self.radius);
@@ -167,7 +167,7 @@ impl Object for MovingSphere {
   fn hit(&self, t_min: T, t_max: T, ray: &Ray) -> Option<HitResult> {
     let oc: Vec3 = ray.origin - self.center(ray.time);
     let a = ray.direction.norm_squared();
-    let half_b = oc.dot(&ray.direction);
+    let half_b = oc.dot(ray.direction);
     let c = oc.norm_squared() - self.radius * self.radius;
     let discriminant = half_b * half_b - a * c;
     if discriminant < 0.0 {
@@ -190,12 +190,12 @@ impl Object for MovingSphere {
     let point = ray.at(t);
     let normal = (point - self.center(ray.time)) / self.radius;
     // See the Sphere hit subroutine for why we compute u, v this way.
-    let theta = (-normal.y).acos();
-    let phi = (-normal.z).atan2(normal.x) + PI;
+    let theta = (-normal.y()).acos();
+    let phi = (-normal.z()).atan2(normal.x()) + PI;
 
     let u = phi / (2.0 * PI);
     let v = theta / PI;
-    HitResultPayload::new(point, ray, &normal, &self.material, u, v)
+    HitResultPayload::new(point, ray, normal, &self.material, u, v)
   }
   
   fn bounding_box(&self, time0: T, time1: T) -> Option<BoundingBox> {
@@ -226,35 +226,3 @@ impl ObjectList {
     self.objects.push(Some(obj));
   }
 }
-/*
-impl Object for ObjectList {
-  fn hit(&self, t_min: T, t_max: T, ray: &Ray) -> Option<HitResult> {
-    let mut result: Option<HitResult> = None;
-    let mut current_max = t_max;
-    for obj in self.objects.iter() {
-      match obj.as_ref().unwrap().hit(t_min, current_max, ray) {
-        Some(hr) => {
-          current_max = hr.t;
-          result = Some(hr);
-        }
-        None => {}
-      }
-    }
-    return result;
-  }
-  fn bounding_box(&self, time0: T, time1: T) -> Option<BoundingBox> {
-    let mut bbox = None;
-    for obj in self.objects.iter() {
-      match obj.as_ref().unwrap().bounding_box(time0, time1) {
-        None => {}
-        Some(obj_box) => { 
-          match bbox {
-            None => { bbox = Some(obj_box); }
-            Some(ref mut x) => { *x = BoundingBox::surrounding_box(&x, &obj_box); }
-          }
-        }
-      }
-    }
-    bbox
-  }
-}*/

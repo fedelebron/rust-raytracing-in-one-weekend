@@ -1,184 +1,198 @@
-use rand::Rng;
 use std::f32::consts::PI;
-use std::ops::{
-  Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAssign,
-};
+use rand::Rng;
+
+use std::ops::{Add, AddAssign, DivAssign, Div, Mul, MulAssign, Sub, SubAssign, Neg};
+
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::*;
 
 type T = f32;
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Vec3 {
-  pub x: T,
-  pub y: T,
-  pub z: T,
+pub const fn _mm_shuffle(z: u32, y: u32, x: u32, w: u32) -> i32 {
+    ((z << 6) | (y << 4) | (x << 2) | w) as i32
 }
 
+#[derive(Clone, Copy, Debug)]
+#[repr(align(16), C)]
+pub struct Vec3(pub(crate) __m128);
 impl Vec3 {
-  pub fn new(x: T, y: T, z: T) -> Vec3 {
-    Vec3 { x, y, z }
+  pub fn new(x: T, y: T, z: T) -> Self {
+    unsafe {
+      Self(_mm_set_ps(0.0, z, y, x))
+    }
   }
-
+  pub fn x(self) -> T {
+    unsafe {
+      _mm_cvtss_f32(self.0)
+    }
+  }
+  pub fn y(self) -> T {
+    unsafe {
+      _mm_cvtss_f32(_mm_shuffle_ps(self.0, self.0, _mm_shuffle(0, 0, 0, 1)))
+    }
+  }
+  pub fn z(self) -> T {
+    unsafe {
+      _mm_cvtss_f32(_mm_shuffle_ps(self.0, self.0, _mm_shuffle(0, 0, 0, 2)))
+    }
+  }
   pub fn random_unit() -> Vec3 {
     let mut rng = rand::thread_rng();
     let theta = (2.0 * PI * rng.gen::<T>()) as T;
     let phi = ((1.0 - 2.0 * rng.gen::<T>()) as T).acos();
-    Vec3 {
-      x: phi.sin() * theta.cos(),
-      y: phi.sin() * theta.sin(),
-      z: phi.cos(),
-    }
-  }
-
-  pub fn near_zero(&self) -> bool {
-    for i in 0..3 {
-      if self[i].abs() > 1e-8 {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  pub fn norm_squared(&self) -> T {
-    self.x * self.x + self.y * self.y + self.z * self.z
-  }
-
-  pub fn norm(&self) -> T {
-    self.norm_squared().sqrt()
-  }
-
-  pub fn normalize(&self) -> Vec3 {
-    *self / self.norm()
-  }
-
-  pub fn cross(&self, v: &Vec3) -> Vec3 {
     Vec3::new(
-      self.y * v.z - self.z * v.y,
-      self.z * v.x - self.x * v.z,
-      self.x * v.y - self.y * v.x,
+      phi.sin() * theta.cos(),
+      phi.sin() * theta.sin(),
+      phi.cos(),
     )
   }
-
-  pub fn dot(&self, rhs: &Vec3) -> T {
-    self.x * rhs.x + self.y * rhs.y + self.z * rhs.z
+  pub fn near_zero(self) -> bool {
+    return self.abs().max_element() <= 1e-8;
   }
-
-  pub fn min(&self, rhs: Vec3) -> Vec3 {
-    Vec3 {
-        x: self.x.min(rhs.x),
-        y: self.y.min(rhs.y),
-        z: self.z.min(rhs.z)
+  pub fn normalize(self) -> Self {
+    unsafe {
+      let dot = self.dot_as_vec3(self);
+      Self(_mm_div_ps(self.0, _mm_sqrt_ps(dot.0)))
     }
   }
-  
-  pub fn max(&self, rhs: Vec3) -> Vec3 {
-    Vec3 {
-        x: self.x.max(rhs.x),
-        y: self.y.max(rhs.y),
-        z: self.z.max(rhs.z)
+  pub fn cross(self, rhs: Self) -> Self {
+    unsafe {
+      let lhszxy = _mm_shuffle_ps(self.0, self.0, 0b01_01_00_10);
+      let rhszxy = _mm_shuffle_ps(rhs.0, rhs.0, 0b01_01_00_10);
+      let lhszxy_rhs = _mm_mul_ps(lhszxy, rhs.0);
+      let rhszxy_lhs = _mm_mul_ps(rhszxy, self.0);
+      let sub = _mm_sub_ps(lhszxy_rhs, rhszxy_lhs);
+      Self(_mm_shuffle_ps(sub, sub, 0b01_01_00_10))
+    }
+  }
+  pub fn dot(self, rhs: Self) -> T {
+    unsafe {
+      _mm_cvtss_f32(self.dot_as_m128(rhs))
+    }
+  }
+  fn dot_as_m128(self, rhs: Self) -> __m128 {
+    unsafe {
+      let x2_y2_z2_w2 = _mm_mul_ps(self.0, rhs.0);
+      let y2_0_0_0 = _mm_shuffle_ps(x2_y2_z2_w2, x2_y2_z2_w2, 0b00_00_00_01);
+      let z2_0_0_0 = _mm_shuffle_ps(x2_y2_z2_w2, x2_y2_z2_w2, 0b00_00_00_10);
+      let x2y2_0_0_0 = _mm_add_ss(x2_y2_z2_w2, y2_0_0_0);
+      _mm_add_ss(x2y2_0_0_0, z2_0_0_0)
+    }
+  }
+  pub fn dot_as_vec3(self, rhs: Self) -> Self {
+    unsafe {
+      let dot_in_x = self.dot_as_m128(rhs);
+      Vec3(_mm_shuffle_ps(dot_in_x, dot_in_x, 0b00_00_00_00))
+    }
+  }
+  pub fn abs(&self) -> Self {
+    unsafe {
+      Self(_mm_and_ps(self.0,
+                      _mm_castsi128_ps(_mm_set1_epi32(0x7f_ff_ff_ff)),
+      ))
+    }
+  }
+  pub fn norm_squared(self) -> T {
+    self.dot(self)
+  }
+  pub fn norm(self) -> T {
+    self.norm_squared().sqrt()
+  }
+  #[inline]
+  pub fn min(self, other: Self) -> Self {
+    unsafe { Self(_mm_min_ps(self.0, other.0)) }
+  }
+
+  #[inline]
+  pub fn max(self, other: Self) -> Self {
+    unsafe { Self(_mm_max_ps(self.0, other.0)) }
+  }
+  #[inline]
+  pub fn min_element(self) -> f32 {
+    unsafe {
+      let v = self.0;
+      let v = _mm_min_ps(v, _mm_shuffle_ps(v, v, 0b01_01_10_10));
+      let v = _mm_min_ps(v, _mm_shuffle_ps(v, v, 0b00_00_00_01));
+      _mm_cvtss_f32(v)
     }
   }
 
-  pub fn min_element(&self) -> T {
-    self.x.min(self.y.min(self.z))
-  }
-  
-  pub fn max_element(&self) -> T {
-    self.x.max(self.y.max(self.z))
-  }
-}
-
-impl Index<usize> for Vec3 {
-  type Output = T;
-
-  fn index(&self, index: usize) -> &T {
-    match index {
-      0 => &self.x,
-      1 => &self.y,
-      2 => &self.z,
-      _ => panic!("Invalid vec3 index: {:?}", index),
-    }
-  }
-}
-
-impl IndexMut<usize> for Vec3 {
-  fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-    match index {
-      0 => &mut self.x,
-      1 => &mut self.y,
-      2 => &mut self.z,
-      _ => panic!("Invalid vec3 index: {:?}", index),
+  #[inline]
+  pub fn max_element(self) -> f32 {
+    unsafe {
+      let v = self.0;
+      let v = _mm_max_ps(v, _mm_shuffle_ps(v, v, 0b00_00_10_10));
+      let v = _mm_max_ps(v, _mm_shuffle_ps(v, v, 0b00_00_00_01));
+      _mm_cvtss_f32(v)
     }
   }
 }
 
 impl Neg for Vec3 {
-  type Output = Self;
+  type Output = Vec3;
   fn neg(self) -> Self {
-    Vec3 {
-      x: -self.x,
-      y: -self.y,
-      z: -self.z,
-    }
+    (-1.0) * self
   }
 }
 
-impl Add<Vec3> for Vec3 {
+impl Add for Vec3 {
   type Output = Self;
-  fn add(self, rhs: Vec3) -> Vec3 {
-    Vec3 {
-      x: self.x + rhs.x,
-      y: self.y + rhs.y,
-      z: self.z + rhs.z,
+  fn add(self, rhs: Self) -> Self {
+    unsafe {
+      Vec3(_mm_add_ps(self.0, rhs.0))
     }
   }
 }
 
 impl AddAssign<Vec3> for Vec3 {
   fn add_assign(&mut self, rhs: Vec3) {
-    self.x += rhs.x;
-    self.y += rhs.y;
-    self.z += rhs.z;
+    *self = (*self) + rhs;
   }
 }
 
-impl Sub<Vec3> for Vec3 {
+
+impl Div<Vec3> for T {
+  type Output = Vec3;
+  #[inline]
+  fn div(self, other: Vec3) -> Vec3 {
+    unsafe { Vec3(_mm_div_ps(_mm_set1_ps(self), other.0)) }
+  }
+}
+
+impl DivAssign<T> for Vec3 {
+  fn div_assign(&mut self, rhs: T) {
+    self.0 = (*self / rhs).0
+  }
+}
+impl Div<f32> for Vec3 {
+  type Output = Vec3;
+  #[inline]
+  fn div(self, other: T) -> Vec3 {
+    unsafe { Vec3(_mm_div_ps(self.0, _mm_set1_ps(other))) }
+  }
+}
+
+impl Sub for Vec3 {
   type Output = Self;
-  fn sub(self, rhs: Vec3) -> Vec3 {
-    Vec3 {
-      x: self.x - rhs.x,
-      y: self.y - rhs.y,
-      z: self.z - rhs.z,
-    }
-  }
-}
-
-impl SubAssign<Vec3> for Vec3 {
-  fn sub_assign(&mut self, rhs: Vec3) {
-    self.x -= rhs.x;
-    self.y -= rhs.y;
-    self.z -= rhs.z;
-  }
-}
-
-impl Mul<T> for Vec3 {
-  type Output = Self;
-  fn mul(self, rhs: T) -> Vec3 {
-    Vec3 {
-      x: self.x * rhs,
-      y: self.y * rhs,
-      z: self.z * rhs,
-    }
+  #[inline]
+  fn sub(self, other: Self) -> Self {
+    unsafe { Self(_mm_sub_ps(self.0, other.0)) }
   }
 }
 
 impl Mul<Vec3> for Vec3 {
   type Output = Self;
-  fn mul(self, rhs: Vec3) -> Vec3 {
-    Vec3 {
-      x: self.x * rhs.x,
-      y: self.y * rhs.y,
-      z: self.z * rhs.z,
-    }
+  #[inline]
+  fn mul(self, other: Self) -> Self {
+    unsafe { Self(_mm_mul_ps(self.0, other.0)) }
+  }
+}
+
+impl Mul<T> for Vec3 {
+  type Output = Self;
+  #[inline]
+  fn mul(self, other: f32) -> Self {
+    unsafe { Self(_mm_mul_ps(self.0, _mm_set1_ps(other))) }
   }
 }
 
@@ -189,82 +203,33 @@ impl Mul<Vec3> for T {
   }
 }
 
-impl MulAssign<T> for Vec3 {
-  fn mul_assign(&mut self, rhs: T) {
-    self.x *= rhs;
-    self.y *= rhs;
-    self.z *= rhs;
-  }
-}
-
-impl Div<T> for Vec3 {
-  type Output = Self;
-  fn div(self, rhs: T) -> Vec3 {
-    Vec3 {
-      x: self.x / rhs,
-      y: self.y / rhs,
-      z: self.z / rhs,
-    }
-  }
-}
-
-impl Div<Vec3> for T {
-  type Output = Vec3;
-  fn div(self, rhs: Vec3) -> Vec3 {
-    Vec3 {
-      x: self / rhs.x,
-      y: self / rhs.y,
-      z: self / rhs.z
-    }
-  }
-}
-
-impl DivAssign<T> for Vec3 {
-  fn div_assign(&mut self, rhs: T) {
-    self.x /= rhs;
-    self.y /= rhs;
-    self.z /= rhs;
-  }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Clone, Copy, Debug)]
 pub struct Point(pub Vec3);
+
 impl Point {
   pub fn new(x: T, y: T, z: T) -> Point {
-    Point(Vec3 { x: x, y: y, z: z })
+    Point(Vec3::new(x, y, z))
   }
 }
 
 impl Sub<Vec3> for Point {
   type Output = Self;
   fn sub(self, rhs: Vec3) -> Point {
-    Point(Vec3 {
-      x: self.0.x - rhs.x,
-      y: self.0.y - rhs.y,
-      z: self.0.z - rhs.z,
-    })
+    Point(self.0 - rhs)
   }
 }
 
 impl Sub<Point> for Point {
   type Output = Vec3;
   fn sub(self, rhs: Point) -> Vec3 {
-    Vec3 {
-      x: self.0.x - rhs.0.x,
-      y: self.0.y - rhs.0.y,
-      z: self.0.z - rhs.0.z,
-    }
+    self.0 - rhs.0
   }
 }
 
 impl Add<Vec3> for Point {
   type Output = Self;
   fn add(self, rhs: Vec3) -> Point {
-    Point(Vec3 {
-      x: self.0.x + rhs.x,
-      y: self.0.y + rhs.y,
-      z: self.0.z + rhs.z,
-    })
+    Point(self.0 + rhs)
   }
 }
 
@@ -278,11 +243,7 @@ impl Add<Point> for Point {
 impl Mul<T> for Point {
   type Output = Self;
   fn mul(self, rhs: T) -> Self {
-    Point(Vec3 {
-        x: self.0.x * rhs,
-        y: self.0.y * rhs,
-        z: self.0.z * rhs
-    })
+    Point(rhs * self.0)
   }
 }
 
@@ -293,24 +254,11 @@ impl Mul<Point> for T {
   }
 }
 
-impl Index<usize> for Point {
-  type Output = T;
-  fn index(&self, index: usize) -> &T {
-    &self.0[index]
-  }
-}
-
-impl IndexMut<usize> for Point {
-  fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-    &mut self.0[index]
-  }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Clone, Copy)]
 pub struct Color(pub Vec3);
 impl Color {
-  pub const fn new(x: T, y: T, z: T) -> Color {
-    Color(Vec3 { x: x, y: y, z: z })
+  pub fn new(x: T, y: T, z: T) -> Color {
+    Color(Vec3::new(x, y, z))
   }
 
   pub fn random() -> Color {
@@ -327,18 +275,17 @@ impl Color {
     )
   }
 
-  pub fn r(&self) -> T {
-    self.0.x
+  pub fn r(self) -> T {
+    self.0.x()
   }
-  pub fn g(&self) -> T {
-    self.0.y
+  pub fn g(self) -> T {
+    self.0.y()
   }
-  pub fn b(&self) -> T {
-    self.0.z
+  pub fn b(self) -> T {
+    self.0.z()
   }
 }
-unsafe impl Sync for Color {}
-unsafe impl Send for Color {}
+
 impl Mul<T> for Color {
   type Output = Self;
   fn mul(self, rhs: T) -> Color {
@@ -356,7 +303,7 @@ impl Mul<Color> for T {
 impl Mul<Color> for Color {
   type Output = Color;
   fn mul(self, rhs: Color) -> Color {
-    Color::new(self.r() * rhs.r(), self.g() * rhs.g(), self.b() * rhs.b())
+    Color(self.0 * rhs.0)
   }
 }
 
@@ -377,4 +324,55 @@ impl DivAssign<T> for Color {
   fn div_assign(&mut self, rhs: T) {
     self.0 /= rhs;
   }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::vec3;
+  #[test]
+  fn test_vec() {
+    let v = vec3::Vec3::new(1.0, 2.0, 3.0);
+    let w = vec3::Vec3::new(7.0, 2.0, -4.0);
+    let v2 = Vec3::new(1.0, 2.0, 3.0);
+    let w2 = Vec3::new(7.0, 2.0, -4.0);
+
+    let u = v.cross(w);
+    let u2 = v2.cross(w2);
+    assert_eq!(u.x(), u2.x());
+    assert_eq!(u.y(), u2.y());
+    assert_eq!(u.z(), u2.z());
+  }
+  #[test]
+  fn test_scalar() {
+    let v = vec3::Vec3::new(1.0, 2.0, 3.0);
+    let w = vec3::Vec3::new(7.0, 2.0, -4.0);
+    let v2 = Vec3::new(1.0, 2.0, 3.0);
+    let w2 = Vec3::new(7.0, 2.0, -4.0);
+
+    let u = v.dot(w);
+    let u2 = v2.dot(w2);
+    assert_eq!(u, u2);
+  }
+  #[test]
+  fn test_unary_scalar() {
+    let v = vec3::Vec3::new(1.0, 2.0, 3.0);
+    let v2 = Vec3::new(1.0, 2.0, 3.0);
+
+    let u = v.norm();
+    let u2 = v2.norm();
+    assert_eq!(u, u2);
+  }
+  #[test]
+  fn test_unary_vec() {
+    let v = vec3::Vec3::new(1.0, 2.0, 3.0);
+    let v2 = Vec3::new(1.0, 2.0, 3.0);
+
+    let u = v.normalize();
+    let u2 = v2.normalize();
+    assert_eq!(u.x(), u2.x());
+    assert_eq!(u.y(), u2.y());
+    assert_eq!(u.z(), u2.z());
+  }
+
 }
