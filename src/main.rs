@@ -73,7 +73,7 @@ fn make_world() -> World {
   let checkers = Texture::Checkers(
       Arc::new(Texture::Color(Color::new(0.2, 0.3, 0.1))),
       Arc::new(Texture::Color(Color::new(0.9, 0.9, 0.9))));
-  world.objects.add(Arc::new(Sphere::new(
+  world.objects.add(Box::new(Sphere::new(
     Point::new(0.0, -1000.0, 0.0),
     1000.0,
     Material::new_lambertian(checkers),
@@ -94,7 +94,7 @@ fn make_world() -> World {
       if choose_mat < 0.5 {
         let center2 = sphere_center; // + Vec3::new(0.0, rng.gen_range(0.0 .. 0.0), 0.0);
         let albedo = Color::random() * Color::random();
-        world.objects.add(Arc::new(MovingSphere::new(
+        world.objects.add(Box::new(MovingSphere::new(
           sphere_center,
           center2,
           0.0,
@@ -105,13 +105,13 @@ fn make_world() -> World {
       } else if choose_mat < 0.65 {
         let albedo = Color::random_range(0.5, 1.0);
         let fuzz = rng.gen_range(0.0..0.5);
-        world.objects.add(Arc::new(Sphere::new(
+        world.objects.add(Box::new(Sphere::new(
           sphere_center,
           0.2,
           Material::new_metal(Texture::Color(albedo), fuzz),
         )));
       } else {
-        world.objects.add(Arc::new(Sphere::new(
+        world.objects.add(Box::new(Sphere::new(
           sphere_center,
           0.2,
           Material::new_dielectric(1.5),
@@ -120,19 +120,19 @@ fn make_world() -> World {
     }
   }
 
-  world.objects.add(Arc::new(Sphere::new(
+  world.objects.add(Box::new(Sphere::new(
     Point::new(2.0, 1.0, 0.0),
     1.0,
     Material::new_dielectric(1.5),
   )));
 
   let earth_texture = Texture::from_image_filename("/usr/local/google/home/flebron/rust/sarah.png");
-  world.objects.add(Arc::new(Sphere::new(
+  world.objects.add(Box::new(Sphere::new(
     Point::new(0.0, 1.0, 0.0),
     1.0,
     Material::new_lambertian(earth_texture),
   )));
-  world.objects.add(Arc::new(Sphere::new(
+  world.objects.add(Box::new(Sphere::new(
     Point::new(-2.0, 1.0, 0.0),
     1.0,
     Material::new_metal(Texture::Color(Color::new(0.7, 0.6, 0.5)), 0.0),

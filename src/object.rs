@@ -205,7 +205,7 @@ impl Object for MovingSphere {
 }
 
 pub struct ObjectList {
-  pub objects: Vec<Arc<dyn Object + Sync + Send>>,
+  pub objects: Vec<Option<Box<dyn Object + Sync + Send>>>,
 }
 
 impl ObjectList {
@@ -214,8 +214,8 @@ impl ObjectList {
       objects: Vec::new(),
     }
   }
-  pub fn add(&mut self, obj: Arc<dyn Object + Sync + Send>) {
-    self.objects.push(obj);
+  pub fn add(&mut self, obj: Box<dyn Object + Sync + Send>) {
+    self.objects.push(Some(obj));
   }
 }
 
@@ -224,7 +224,7 @@ impl Object for ObjectList {
     let mut result: Option<HitResult> = None;
     let mut current_max = t_max;
     for obj in self.objects.iter() {
-      match obj.hit(t_min, current_max, ray) {
+      match obj.as_ref().unwrap().hit(t_min, current_max, ray) {
         Some(hr) => {
           current_max = hr.t;
           result = Some(hr);
@@ -237,7 +237,7 @@ impl Object for ObjectList {
   fn bounding_box(&self, time0: T, time1: T) -> Option<BoundingBox> {
     let mut bbox = None;
     for obj in self.objects.iter() {
-      match obj.bounding_box(time0, time1) {
+      match obj.as_ref().unwrap().bounding_box(time0, time1) {
         None => {}
         Some(obj_box) => { 
           match bbox {

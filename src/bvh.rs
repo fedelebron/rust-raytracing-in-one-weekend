@@ -10,8 +10,8 @@ use std::sync::Arc;
 type T = f32;
 
 pub struct BVHNode {
-  left: Option<Arc<dyn Object + Send + Sync>>,
-  right: Option<Arc<dyn Object + Send + Sync>>,
+  left: Option<Box<dyn Object + Send + Sync>>,
+  right: Option<Box<dyn Object + Send + Sync>>,
   bounding_box: BoundingBox,
 }
 
@@ -28,38 +28,45 @@ impl BVHNode {
   }
 
   pub fn new_from_objects(
-    objects: &mut [Arc<dyn Object + Send + Sync>],
+    objects: &mut [Option<Box<dyn Object + Send + Sync>>],
     time0: T,
     time1: T,
   ) -> BVHNode {
     let mut rng = rand::thread_rng();
     let axis: usize = rng.gen_range(0..3);
-    let comparator = |x: &Arc<dyn Object + Send + Sync>,
-                      y: &Arc<dyn Object + Send + Sync>| {
-      compare_by_dim(&(**x), &(**y), time0, time1, axis)
-    };
+    let comparator =
+      |x: &Option<Box<dyn Object + Send + Sync>>,
+       y: &Option<Box<dyn Object + Send + Sync>>| {
+        compare_by_dim(
+          &**(x.as_ref().unwrap()),
+          &**(y.as_ref().unwrap()),
+          time0,
+          time1,
+          axis,
+        )
+      };
     let mut node = BVHNode::new();
     let n = objects.len();
     if n == 1 {
-      node.left = Some(objects[0].clone());
-      node.right = Some(objects[0].clone());
+      node.left = objects[0].take();
+      node.right = None;
     } else if n == 2 {
       if comparator(&objects[0], &objects[1]) == Ordering::Less {
-        node.left = Some(objects[0].clone());
-        node.right = Some(objects[1].clone());
+        node.left = objects[0].take();
+        node.right = objects[1].take();
       } else {
-        node.left = Some(objects[1].clone());
-        node.right = Some(objects[0].clone());
+        node.left = objects[1].take();
+        node.right = objects[0].take();
       }
     } else {
       objects.sort_by(comparator);
       let mid = n / 2;
-      node.left = Some(Arc::new(BVHNode::new_from_objects(
+      node.left = Some(Box::new(BVHNode::new_from_objects(
         &mut objects[0..mid],
         time0,
         time1,
       )));
-      node.right = Some(Arc::new(BVHNode::new_from_objects(
+      node.right = Some(Box::new(BVHNode::new_from_objects(
         &mut objects[mid..n],
         time0,
         time1,
@@ -71,9 +78,18 @@ impl BVHNode {
       .unwrap()
       .bounding_box(time0, time1)
       .unwrap();
-    let right_bb = node.right.as_ref().unwrap().bounding_box(time0, time1).unwrap();
-    
-    node.bounding_box = BoundingBox::surrounding_box(&left_bb, &right_bb);
+
+    if n == 1 {
+      node.bounding_box = left_bb;
+    } else {
+      let right_bb = node
+        .right
+        .as_ref()
+        .unwrap()
+        .bounding_box(time0, time1)
+        .unwrap();
+      node.bounding_box = BoundingBox::surrounding_box(&left_bb, &right_bb);
+    }
     node
   }
 }
@@ -83,18 +99,22 @@ impl Object for BVHNode {
     if !self.bounding_box.hit(t_min, t_max, ray) {
       return None;
     }
-    
     let left_node = self.left.as_ref().unwrap();
+    let left_hit = left_node.hit(t_min, t_max, ray);
+
+    if self.right.is_none() {
+      return left_hit;
+    }
+
     let right_node = self.right.as_ref().unwrap();
 
-    let left_hit = left_node.hit(t_min, t_max, ray);
     match left_hit {
       None => right_node.hit(t_min, t_max, ray),
       Some(ref hrl) => {
         let right_hit = right_node.hit(t_min, hrl.t, ray);
         match right_hit {
           None => left_hit,
-          Some(_) => right_hit
+          Some(_) => right_hit,
         }
       }
     }
