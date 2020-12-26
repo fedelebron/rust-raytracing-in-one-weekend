@@ -26,7 +26,7 @@ use threadpool::ThreadPool;
 
 type T = f32;
 
-fn ray_color(r: &Ray, obj: &dyn Object, depth: i32) -> Color {
+fn ray_color(r: &Ray, obj: &Object, depth: i32) -> Color {
   const BLACK: Color = Color::new(0.0, 0.0, 0.0);
   const WHITE: Color = Color::new(1.0, 1.0, 1.0);
   const SKY: Color = Color::new(0.5, 0.7, 1.0);
@@ -48,22 +48,22 @@ fn ray_color(r: &Ray, obj: &dyn Object, depth: i32) -> Color {
 
 struct World {
   pub objects: ObjectList,
-  pub bvh: BVHNode
+  pub bvh: Option<Object>
 }
 
 impl World {
   pub fn new() -> World {
     World {
       objects: ObjectList::new(),
-      bvh: BVHNode::new()
+      bvh: None
     }
   }
   fn create_bvh(&mut self) {
     let n = self.objects.objects.len();
-    self.bvh = BVHNode::new_from_objects(
+    self.bvh = Some(Object::BVHNodeType(BVHNode::new_from_objects(
         &mut self.objects.objects[..],
         // &mut (0 .. n - 1).collect::<Vec<usize>>()[..],
-        0.0, 1.0)
+        0.0, 1.0)))
   }
 }
 
@@ -73,11 +73,11 @@ fn make_world() -> World {
   let checkers = Texture::Checkers(
       Arc::new(Texture::Color(Color::new(0.2, 0.3, 0.1))),
       Arc::new(Texture::Color(Color::new(0.9, 0.9, 0.9))));
-  world.objects.add(Arc::new(Sphere::new(
+  world.objects.add(Box::new(Object::SphereType(Sphere::new(
     Point::new(0.0, -1000.0, 0.0),
     1000.0,
     Material::new_lambertian(checkers),
-  )));
+  ))));
 
   let image_central_point = Point::new(4.0, 0.2, 0.0);
   for a in -11..11 {
@@ -94,49 +94,49 @@ fn make_world() -> World {
       if choose_mat < 0.5 {
         let center2 = sphere_center; // + Vec3::new(0.0, rng.gen_range(0.0 .. 0.0), 0.0);
         let albedo = Color::random() * Color::random();
-        world.objects.add(Arc::new(MovingSphere::new(
+        world.objects.add(Box::new(Object::MovingSphereType(MovingSphere::new(
           sphere_center,
           center2,
           0.0,
           1.0,
           0.2,
           Material::new_lambertian(Texture::Color(albedo)),
-        )));
+        ))));
       } else if choose_mat < 0.65 {
         let albedo = Color::random_range(0.5, 1.0);
         let fuzz = rng.gen_range(0.0..0.5);
-        world.objects.add(Arc::new(Sphere::new(
+        world.objects.add(Box::new(Object::SphereType(Sphere::new(
           sphere_center,
           0.2,
           Material::new_metal(Texture::Color(albedo), fuzz),
-        )));
+        ))));
       } else {
-        world.objects.add(Arc::new(Sphere::new(
+        world.objects.add(Box::new(Object::SphereType(Sphere::new(
           sphere_center,
           0.2,
           Material::new_dielectric(1.5),
-        )));
+        ))));
       }
     }
   }
 
-  world.objects.add(Arc::new(Sphere::new(
+  world.objects.add(Box::new(Object::SphereType(Sphere::new(
     Point::new(2.0, 1.0, 0.0),
     1.0,
     Material::new_dielectric(1.5),
-  )));
+  ))));
 
   let earth_texture = Texture::from_image_filename("/usr/local/google/home/flebron/rust/sarah.png");
-  world.objects.add(Arc::new(Sphere::new(
+  world.objects.add(Box::new(Object::SphereType(Sphere::new(
     Point::new(0.0, 1.0, 0.0),
     1.0,
     Material::new_lambertian(earth_texture),
-  )));
-  world.objects.add(Arc::new(Sphere::new(
+  ))));
+  world.objects.add(Box::new(Object::SphereType(Sphere::new(
     Point::new(-2.0, 1.0, 0.0),
     1.0,
     Material::new_metal(Texture::Color(Color::new(0.7, 0.6, 0.5)), 0.0),
-  )));
+  ))));
 
   world.create_bvh();
 
@@ -195,7 +195,7 @@ fn render_spheres() {
           let v = ((j as T) + rj) / (image_height - 1) as T;
           let r = camera.get_ray(u, v);
 
-          pixel_color += ray_color(&r, &my_world.bvh, 50);
+          pixel_color += ray_color(&r, &my_world.bvh.as_ref().unwrap(), 50);
         }
         pixel_color /= samples_per_pixel as f32;
         tx.send((i, j, pixel_color)).unwrap();
