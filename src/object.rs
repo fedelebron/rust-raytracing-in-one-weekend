@@ -2,7 +2,6 @@ use crate::aabb::*;
 use crate::material2::*;
 use crate::ray::*;
 use crate::vec3::*;
-use crate::bvh::*;
 use std::sync::Arc;
 use std::f32::consts::PI;
 
@@ -47,27 +46,9 @@ impl HitResult<'_> {
   }
 }
 
-pub enum Object {
-  SphereType(Sphere),
-  MovingSphereType(MovingSphere),
-  BVHNodeType(BVHNode)
-}
-
-impl Object {
-  pub fn hit(&self, t_min: T, t_max: T, ray: &Ray) -> Option<HitResult> {
-    match self {
-      Object::SphereType(ref sphere) => { sphere.hit(t_min, t_max, ray) },
-      Object::MovingSphereType(ref moving_sphere) => { moving_sphere.hit(t_min, t_max, ray) },
-      Object::BVHNodeType(ref bvhnode) => { bvhnode.hit(t_min, t_max, ray) }
-    }
-  }
-  pub fn bounding_box(&self, time0: T, time1: T) -> Option<BoundingBox> {
-    match self {
-      Object::SphereType(ref sphere) => { sphere.bounding_box(time0, time1) },
-      Object::MovingSphereType(ref moving_sphere) => { moving_sphere.bounding_box(time0, time1) },
-      Object::BVHNodeType(ref bvhnode) => { bvhnode.bounding_box(time0, time1) }
-    }
-  }
+pub trait Object {
+  fn hit(&self, t_min: T, t_max: T, ray: &Ray) -> Option<HitResult>;
+  fn bounding_box(&self, time0: T, time1: T) -> Option<BoundingBox>;
 }
 
 pub struct Sphere {
@@ -107,8 +88,10 @@ impl Sphere {
     }
     return root;
   }
-  
-  pub fn hit(&self, t_min: T, t_max: T, ray: &Ray) -> Option<HitResult> {
+}
+
+impl Object for Sphere {
+  fn hit(&self, t_min: T, t_max: T, ray: &Ray) -> Option<HitResult> {
     let t = self.hits_sphere(t_min, t_max, ray);
     if t < 0.0 {
       None
@@ -129,7 +112,7 @@ impl Sphere {
       Some(HitResult::new(point, ray, t, &normal, &self.material, u, v))
     }
   }
-  pub fn bounding_box(&self, time0: T, time1: T) -> Option<BoundingBox> {
+  fn bounding_box(&self, time0: T, time1: T) -> Option<BoundingBox> {
     let v = Vec3::new(self.radius, self.radius, self.radius);
     Some(BoundingBox::new(
       self.center - v,
@@ -172,8 +155,8 @@ impl MovingSphere {
   }
 }
 
-impl MovingSphere {
-  pub fn hit(&self, t_min: T, t_max: T, ray: &Ray) -> Option<HitResult> {
+impl Object for MovingSphere {
+  fn hit(&self, t_min: T, t_max: T, ray: &Ray) -> Option<HitResult> {
     let oc: Vec3 = ray.origin - self.center(ray.time);
     let a = ray.direction.norm_squared();
     let half_b = oc.dot(&ray.direction);
@@ -207,7 +190,7 @@ impl MovingSphere {
     }
   }
   
-  pub fn bounding_box(&self, time0: T, time1: T) -> Option<BoundingBox> {
+  fn bounding_box(&self, time0: T, time1: T) -> Option<BoundingBox> {
     let v = Vec3::new(self.radius, self.radius, self.radius);
     let bb0 = BoundingBox::new(
       self.center(time0) - v,
@@ -222,7 +205,7 @@ impl MovingSphere {
 }
 
 pub struct ObjectList {
-  pub objects: Vec<Option<Box<Object>>>,
+  pub objects: Vec<Arc<dyn Object + Sync + Send>>,
 }
 
 impl ObjectList {
@@ -231,17 +214,17 @@ impl ObjectList {
       objects: Vec::new(),
     }
   }
-  pub fn add(&mut self, obj: Box<Object>) {
-    self.objects.push(Some(obj));
+  pub fn add(&mut self, obj: Arc<dyn Object + Sync + Send>) {
+    self.objects.push(obj);
   }
 }
-/*
+
 impl Object for ObjectList {
   fn hit(&self, t_min: T, t_max: T, ray: &Ray) -> Option<HitResult> {
     let mut result: Option<HitResult> = None;
     let mut current_max = t_max;
     for obj in self.objects.iter() {
-      match obj.as_ref().unwrap().hit(t_min, current_max, ray) {
+      match obj.hit(t_min, current_max, ray) {
         Some(hr) => {
           current_max = hr.t;
           result = Some(hr);
@@ -254,7 +237,7 @@ impl Object for ObjectList {
   fn bounding_box(&self, time0: T, time1: T) -> Option<BoundingBox> {
     let mut bbox = None;
     for obj in self.objects.iter() {
-      match obj.as_ref().unwrap().bounding_box(time0, time1) {
+      match obj.bounding_box(time0, time1) {
         None => {}
         Some(obj_box) => { 
           match bbox {
@@ -266,4 +249,4 @@ impl Object for ObjectList {
     }
     bbox
   }
-}*/
+}
