@@ -46,16 +46,9 @@ fn clamp<T: PartialOrd>(x: T, lo: T, hi: T) -> T {
   return x;
 }
 
-fn get_image_color(image: &RgbImage, mut u: T, mut v: T, p: &Point) -> Color {
+fn get_image_color(image: &RgbImage, mut u: T, mut v: T, _p: &Point) -> Color {
   u = clamp(u, 0.0, 1.0);
   v = 1.0 - clamp(v, 0.0, 1.0);
-
-  // HACK.
-  u -= 0.03;
-  if (u < 0.0) { u += 1.0; }
- 
-  v += 0.1;
-  if (v > 1.0) { v -= 1.0; }
 
   let i = clamp((u * image.width() as f32) as u32, 0, image.width() - 1);
   let j = clamp((v * image.height() as f32) as u32, 0, image.height() - 1);

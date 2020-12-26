@@ -5,7 +5,6 @@ use crate::ray::*;
 use crate::vec3::*;
 use rand::Rng;
 use std::cmp::Ordering;
-use std::sync::Arc;
 
 type T = f32;
 
@@ -72,7 +71,7 @@ impl BVHNode {
         time1,
       )));
     }
-    let mut left_bb = node
+    let left_bb = node
       .left
       .as_ref()
       .unwrap()
@@ -118,6 +117,9 @@ impl Object for BVHNode {
         }
       }
     }
+  }
+  fn hit_payload(&self, _t: T, _ray: &Ray) -> HitResultPayload {
+    panic!("A BVH should never be asked to provide a hit payload.");
   }
   fn bounding_box(&self, _time0: T, _time1: T) -> Option<BoundingBox> {
     Some(self.bounding_box)

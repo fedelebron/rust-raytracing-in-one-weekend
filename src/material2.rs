@@ -21,7 +21,7 @@ impl Material {
   pub fn scatter(
     &self,
     incident_ray: &Ray,
-    hit: &HitResult,
+    hit: &HitResultPayload,
   ) -> Option<ScatterResult> {
     match self {
       Material::Lambertian { albedo: a } => {
@@ -52,7 +52,7 @@ impl Material {
 fn scatter_lambertian(
   albedo: &Texture,
   incident_ray: &Ray,
-  hit: &HitResult,
+  hit: &HitResultPayload,
 ) -> Option<ScatterResult> {
   let mut scatter_direction = hit.normal + Vec3::random_unit();
   if scatter_direction.near_zero() {
@@ -84,7 +84,7 @@ fn scatter_metal(
   albedo: &Texture,
   fuzz: T,
   incident_ray: &Ray,
-  hit: &HitResult,
+  hit: &HitResultPayload,
 ) -> Option<ScatterResult> {
   let r = incident_ray.direction;
   let reflected = reflect(&(r / r.norm()), &hit.normal);
@@ -105,7 +105,7 @@ fn scatter_metal(
 fn scatter_dielectric(
   refraction_index: T,
   incident_ray: &Ray,
-  hit: &HitResult,
+  hit: &HitResultPayload,
 ) -> Option<ScatterResult> {
   let attenuation = Color::new(1.0, 1.0, 1.0);
   let refraction_ratio = if hit.front_face {

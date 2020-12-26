@@ -7,6 +7,7 @@ mod vec3;
 mod aabb;
 mod bvh;
 mod texture;
+mod simd;
 
 use crate::camera::*;
 use crate::canvas::*;
@@ -39,9 +40,12 @@ fn ray_color(r: &Ray, obj: &dyn Object, depth: i32) -> Color {
       let t = 0.5 * (unit.y + 1.0);
       (1.0 - t) * WHITE + t * SKY
     }
-    Some(hr) => match hr.material.scatter(r, &hr) {
-      None => BLACK,
-      Some(sr) => sr.attenuation * ray_color(&sr.scattered_ray, obj, depth - 1),
+    Some(hr) => {
+      let payload = hr.obj.hit_payload(hr.t, r);
+      match payload.material.scatter(r, &payload) {
+        None => BLACK,
+        Some(sr) => sr.attenuation * ray_color(&sr.scattered_ray, obj, depth - 1),
+      }
     },
   }
 }
@@ -59,10 +63,8 @@ impl World {
     }
   }
   fn create_bvh(&mut self) {
-    let n = self.objects.objects.len();
     self.bvh = BVHNode::new_from_objects(
         &mut self.objects.objects[..],
-        // &mut (0 .. n - 1).collect::<Vec<usize>>()[..],
         0.0, 1.0)
   }
 }
@@ -102,7 +104,7 @@ fn make_world() -> World {
           0.2,
           Material::new_lambertian(Texture::Color(albedo)),
         )));
-      } else if choose_mat < 0.65 {
+      } else if choose_mat < 0.85 {
         let albedo = Color::random_range(0.5, 1.0);
         let fuzz = rng.gen_range(0.0..0.5);
         world.objects.add(Box::new(Sphere::new(
@@ -171,7 +173,7 @@ fn render_spheres() {
 
   let world = Arc::new(make_world());
 
-  let n_workers = 8;
+  let n_workers = 12;
   let pool = ThreadPool::new(n_workers);
 
   let bar = ProgressBar::new((image_height * image_width).into());
@@ -179,6 +181,7 @@ fn render_spheres() {
     ProgressStyle::default_bar()
       .template("[{percent}%] {wide_bar} {pos:>7}/{len:7} [{elapsed}, ETA: {eta}]"),
   );
+  bar.set_draw_delta(1000);
 
   let (tx, rx) = channel();
   for j in 0..image_height {

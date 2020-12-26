@@ -61,6 +61,30 @@ impl Vec3 {
   pub fn dot(&self, rhs: &Vec3) -> T {
     self.x * rhs.x + self.y * rhs.y + self.z * rhs.z
   }
+
+  pub fn min(&self, rhs: Vec3) -> Vec3 {
+    Vec3 {
+        x: self.x.min(rhs.x),
+        y: self.y.min(rhs.y),
+        z: self.z.min(rhs.z)
+    }
+  }
+  
+  pub fn max(&self, rhs: Vec3) -> Vec3 {
+    Vec3 {
+        x: self.x.max(rhs.x),
+        y: self.y.max(rhs.y),
+        z: self.z.max(rhs.z)
+    }
+  }
+
+  pub fn min_element(&self) -> T {
+    self.x.min(self.y.min(self.z))
+  }
+  
+  pub fn max_element(&self) -> T {
+    self.x.max(self.y.max(self.z))
+  }
 }
 
 impl Index<usize> for Vec3 {
@@ -147,6 +171,17 @@ impl Mul<T> for Vec3 {
   }
 }
 
+impl Mul<Vec3> for Vec3 {
+  type Output = Self;
+  fn mul(self, rhs: Vec3) -> Vec3 {
+    Vec3 {
+      x: self.x * rhs.x,
+      y: self.y * rhs.y,
+      z: self.z * rhs.z,
+    }
+  }
+}
+
 impl Mul<Vec3> for T {
   type Output = Vec3;
   fn mul(self, rhs: Vec3) -> Vec3 {
@@ -169,6 +204,17 @@ impl Div<T> for Vec3 {
       x: self.x / rhs,
       y: self.y / rhs,
       z: self.z / rhs,
+    }
+  }
+}
+
+impl Div<Vec3> for T {
+  type Output = Vec3;
+  fn div(self, rhs: Vec3) -> Vec3 {
+    Vec3 {
+      x: self / rhs.x,
+      y: self / rhs.y,
+      z: self / rhs.z
     }
   }
 }

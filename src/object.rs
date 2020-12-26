@@ -2,15 +2,13 @@ use crate::aabb::*;
 use crate::material2::*;
 use crate::ray::*;
 use crate::vec3::*;
-use std::sync::Arc;
 use std::f32::consts::PI;
 
 type T = f32;
 
-pub struct HitResult<'a> {
+pub struct HitResultPayload<'a> {
   pub p: Point,
   pub normal: Vec3,
-  pub t: T,
   pub front_face: bool,
   pub material: &'a Material,
   // u, v are surface coordinats for this hit.
@@ -18,25 +16,38 @@ pub struct HitResult<'a> {
   pub v: T
 }
 
+pub struct HitResult<'a> {
+  pub t: T,
+  pub obj: &'a dyn Object
+}
+
 impl HitResult<'_> {
+  pub fn new<'a>(
+    t: T,
+    obj: &'a dyn Object) -> HitResult {
+    HitResult { t, obj }
+  }
+}
+
+
+
+impl HitResultPayload<'_> {
   pub fn new<'a>(
     p: Point,
     r: &Ray,
-    t: T,
     outward_normal: &Vec3,
     material: &'a Material,
     u: T,
-    v: T
-  ) -> HitResult<'a> {
+    v: T,
+  ) -> HitResultPayload<'a> {
     let front_face = r.direction.dot(outward_normal) < 0.0;
     let normal = if front_face {
         *outward_normal
       } else {
         -*outward_normal
       };
-    HitResult {
+    HitResultPayload {
       p,
-      t,
       normal,
       front_face,
       material,
@@ -48,6 +59,7 @@ impl HitResult<'_> {
 
 pub trait Object {
   fn hit(&self, t_min: T, t_max: T, ray: &Ray) -> Option<HitResult>;
+  fn hit_payload(&self, t: T, ray: &Ray) -> HitResultPayload;
   fn bounding_box(&self, time0: T, time1: T) -> Option<BoundingBox>;
 }
 
@@ -68,14 +80,17 @@ impl Sphere {
 }
 
 impl Sphere {
-  fn hits_sphere(&self, t_min: T, t_max: T, ray: &Ray) -> T {
+}
+
+impl Object for Sphere {
+  fn hit(&self, t_min: T, t_max: T, ray: &Ray) -> Option<HitResult> {
     let oc: Vec3 = ray.origin - self.center;
     let a = ray.direction.norm_squared();
     let half_b = oc.dot(&ray.direction);
     let c = oc.norm_squared() - self.radius * self.radius;
     let discriminant = half_b * half_b - a * c;
     if discriminant < 0.0 {
-      return -1.0;
+      return None;
     }
     let sqrtd = discriminant.sqrt();
     let valid_t = |t: T| -> bool { t >= t_min && t <= t_max };
@@ -83,36 +98,29 @@ impl Sphere {
     if !valid_t(root) {
       root = (-half_b + sqrtd) / a;
       if !valid_t(root) {
-        return -1.0;
+        return None;
       }
     }
-    return root;
+    return Some(HitResult { t: root, obj: self });
   }
-}
+  fn hit_payload(&self, t: T, ray: &Ray) -> HitResultPayload {
+    assert!(t >= 0.0);
+    let point = ray.at(t);
+    let mut normal = point - self.center;
+    normal /= self.radius;
 
-impl Object for Sphere {
-  fn hit(&self, t_min: T, t_max: T, ray: &Ray) -> Option<HitResult> {
-    let t = self.hits_sphere(t_min, t_max, ray);
-    if t < 0.0 {
-      None
-    } else {
-      let point = ray.at(t);
-      let mut normal = point - self.center;
-      normal /= self.radius;
+    // If we treat the normal as a point, it becomes the point at which this light ray would've
+    // hit the sphere, had the sphere been centered at the origin. We can then use its
+    // coordinates to figure out the spherical coordinates for the hit, for such an
+    // origin-centered sphere.
+    let theta = (-normal.y).acos();
+    let phi = (-normal.z).atan2(normal.x) + PI;
 
-      // If we treat the normal as a point, it becomes the point at which this light ray would've
-      // hit the sphere, had the sphere been centered at the origin. We can then use its
-      // coordinates to figure out the spherical coordinates for the hit, for such an
-      // origin-centered sphere.
-      let theta = (-normal.y).acos();
-      let phi = (-normal.z).atan2(normal.x) + PI;
-
-      let u = phi / (2.0 * PI);
-      let v = theta / PI;
-      Some(HitResult::new(point, ray, t, &normal, &self.material, u, v))
-    }
+    let u = phi / (2.0 * PI);
+    let v = theta / PI;
+    HitResultPayload::new(point, ray, &normal, &self.material, u, v)
   }
-  fn bounding_box(&self, time0: T, time1: T) -> Option<BoundingBox> {
+  fn bounding_box(&self, _time0: T, _time1: T) -> Option<BoundingBox> {
     let v = Vec3::new(self.radius, self.radius, self.radius);
     Some(BoundingBox::new(
       self.center - v,
@@ -174,20 +182,20 @@ impl Object for MovingSphere {
         return None;
       }
     }
-    let t = root;
-    if t < 0.0 {
-      None
-    } else {
-      let point = ray.at(t);
-      let normal = (point - self.center(ray.time)) / self.radius;
-      // See the Sphere hit subroutine for why we compute u, v this way.
-      let theta = (-normal.y).acos();
-      let phi = (-normal.z).atan2(normal.x) + PI;
+    Some(HitResult::new(root, self))
+  }
 
-      let u = phi / (2.0 * PI);
-      let v = theta / PI;
-      Some(HitResult::new(point, ray, t, &normal, &self.material, u, v))
-    }
+  fn hit_payload(&self, t: T, ray: &Ray) -> HitResultPayload {
+    assert!(t >= 0.0);
+    let point = ray.at(t);
+    let normal = (point - self.center(ray.time)) / self.radius;
+    // See the Sphere hit subroutine for why we compute u, v this way.
+    let theta = (-normal.y).acos();
+    let phi = (-normal.z).atan2(normal.x) + PI;
+
+    let u = phi / (2.0 * PI);
+    let v = theta / PI;
+    HitResultPayload::new(point, ray, &normal, &self.material, u, v)
   }
   
   fn bounding_box(&self, time0: T, time1: T) -> Option<BoundingBox> {
@@ -218,7 +226,7 @@ impl ObjectList {
     self.objects.push(Some(obj));
   }
 }
-
+/*
 impl Object for ObjectList {
   fn hit(&self, t_min: T, t_max: T, ray: &Ray) -> Option<HitResult> {
     let mut result: Option<HitResult> = None;
@@ -249,4 +257,4 @@ impl Object for ObjectList {
     }
     bbox
   }
-}
+}*/
