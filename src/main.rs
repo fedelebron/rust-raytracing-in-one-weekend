@@ -128,7 +128,7 @@ fn make_world() -> World {
     Material::new_dielectric(1.5),
   )));
 
-  let earth_texture = Texture::from_image_filename("/usr/local/google/home/flebron/rust/sarah.png");
+  let earth_texture = Texture::from_image_filename("./earthmap.jpg");
   world.objects.add(Box::new(Sphere::new(
     Point::new(0.0, 1.0, 0.0),
     1.0,
