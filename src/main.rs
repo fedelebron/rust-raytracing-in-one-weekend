@@ -146,8 +146,8 @@ fn make_world() -> World {
 }
 
 fn render_spheres() {
-  let image_width = (1 * 400) as u32;
-  let image_height = (1 * 225) as u32;
+  let image_width = (2 * 400) as u32;
+  let image_height = (2 * 225) as u32;
 
   let samples_per_pixel = 100 as u32;
 
@@ -155,7 +155,6 @@ fn render_spheres() {
   //let lookfrom = Point::new(13.0, 2.0, 3.0);
   let lookfrom = Point::new(3.0, 2.0, 13.0);
   let lookat = Point::new(0.0, 0.0, 0.0);
-  println!("Lookat: {:?}, lookfrom: {:?}, coord: {:?}", lookat, lookfrom, (lookfrom.0.x(), lookfrom.0.y(), lookfrom.0.z()));
   let vup = Vec3::new(0.0, 1.0, 0.0);
   let aspect_ratio = image_width as T / image_height as T;
   let aperture = 0.05; // 2.0;
